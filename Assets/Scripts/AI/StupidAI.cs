@@ -30,76 +30,83 @@ public class StupidAI
 
     public IEnumerator AutoPlay()
     {
-        var boards = boardController.Boards;
         Dictionary<Cell, int> bCellMap = new Dictionary<Cell, int>();
+        var boards = boardController.Boards;
+        int expected = 2;
 
-        while (!bottomBoardController.BottomBoard.IsFull && gameManager.State != GameManager.eStateGame.GAME_WON)
+        while (!bottomBoardController.BottomBoard.IsFull)
         {
             CalculateBMap(bCellMap);
             bool picked = false;
-            Cell target = null;
+            Cell randomCell = null;
 
-            var pairCells = bCellMap.Where(k => k.Value == 2).Select(k => k.Key).ToList();
-            if (pairCells.Count > 0)
+            foreach (var board in boards)
             {
-                foreach (var board in boards)
+                for (int i = 0; i < board.BoardSizeX * board.BoardSizeY; i++)
                 {
-                    foreach (var cell in board.Cells)
-                    {
-                        if (cell == null || !cell.IsOnBoard) continue;
+                    int x = i / board.BoardSizeY;
+                    int y = i % board.BoardSizeY;
+                    Cell cell = board.Cells[x, y];
+                    if (!cell.IsOnBoard) continue;
 
-                        if (pairCells.Any(pc => pc.IsSameType(cell)))
+                    int count = bCellMap.ContainsKey(cell) ? bCellMap[cell] : 0;
+
+                    if (expected == 2 && count == 2)
+                    {
+                        if (boardController.TryMoveToBottomBoard(cell))
                         {
-                            target = cell;
+                            yield return delay;
                             picked = true;
-                            break;
+                            expected = 2;
+                            CalculateBMap(bCellMap);
                         }
+                        break;
                     }
-                    if (picked) break;
-                }
-            }
 
-            if (!picked)
-            {
-                var singleCells = bCellMap.Where(k => k.Value == 1).Select(k => k.Key).ToList();
-                if (singleCells.Count > 0)
-                {
-                    foreach (var board in boards)
+                    else if (expected == 1 && count == 1)
                     {
-                        foreach (var cell in board.Cells)
+                        if (boardController.TryMoveToBottomBoard(cell))
                         {
-                            if (cell == null || !cell.IsOnBoard) continue;
-                            if (singleCells.Any(sc => sc.IsSameType(cell)))
-                            {
-                                target = cell;
-                                picked = true;
-                                break;
-                            }
+                            yield return delay;
+                            picked = true;
+                            expected = 2;
+                            CalculateBMap(bCellMap);
                         }
-                        if (picked) break;
+                        break;
                     }
+
+                    else if (expected == 0)
+                    {
+                        if (boardController.TryMoveToBottomBoard(cell))
+                        {
+                            yield return delay;
+                            picked = true;
+                            expected = 1;
+                            CalculateBMap(bCellMap);
+                        }
+                        break;
+                    }
+
+                    else if (randomCell == null)
+                        randomCell = cell;
+                    else if (Random.Range(0, 5) == 0)
+                        randomCell = cell;
                 }
+
+                if (picked) break;
             }
 
             if (!picked)
             {
-                var validCells = boards
-                     .SelectMany(b => b.Cells.Cast<Cell>())
-                     .Where(c => c != null && c.IsOnBoard)
-                     .ToList();
+                if (!bCellMap.Any(k => k.Value == 2))
+                    expected = 1;
+                else if (!bCellMap.Any(k => k.Value == 1))
+                    expected = 0;
 
-                if (validCells.Count > 0)
-                {
-                    target = validCells[Random.Range(0, validCells.Count)];
-                    picked = true;
-                }
-            }
-
-            if (picked && target != null)
-            {
-                if (boardController.TryMoveToBottomBoard(target))
+                if (randomCell != null && boardController.TryMoveToBottomBoard(randomCell))
                 {
                     yield return delay;
+                    expected = 2;
                     CalculateBMap(bCellMap);
                 }
             }
@@ -122,7 +129,6 @@ public class StupidAI
             }
         }
     }
-
 
 
     public IEnumerator AutoLose()
